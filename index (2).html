@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en" darker-dark-theme color-version="v2_0" typography>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DubTube - YouTube Integration</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
+    
+    <style>
+        /* --- DESIGN SYSTEM & VARIABLES --- */
+        :root {
+            --bg-base: #0a0a0c;
+            --bg-surface: #121216;
+            --bg-card: #1a1a22;
+            --accent: #ff0055; 
+            --accent-glow: rgba(255, 0, 85, 0.4);
+            --text-main: #f5f5f7;
+            --text-muted: #8e8e93;
+            --sidebar-width: 240px;
+            --nav-height: 70px;
+            --proxy-off: #ef4444;
+            --proxy-on: #22c55e;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            font-size: 62.5%;
+            font-family: 'Roboto', Arial, sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            overflow-x: hidden;
+            height: 100%;
+        }
+
+        /* --- NAVIGATION BAR --- */
+        #dub-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: var(--nav-height);
+            background: rgba(18, 18, 22, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            z-index: 1000;
+        }
+
+        .brand-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand {
+            font-size: 2.2rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+
+        .brand span {
+            color: var(--accent);
+            text-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        .proxy-status-light {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--proxy-off);
+            box-shadow: 0 0 8px var(--proxy-off);
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .proxy-status-light.active {
+            background-color: var(--proxy-on);
+            box-shadow: 0 0 8px var(--proxy-on);
+        }
+
+        .search-container {
+            flex: 0 1 500px;
+            display: flex;
+        }
+
+        .search-bar {
+            width: 100%;
+            padding: 10px 20px;
+            background: var(--bg-card);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            color: var(--text-main);
+            font-size: 1.4rem;
+            transition: all 0.3s ease;
+        }
+
+        .search-bar:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 15px var(--accent-glow);
+            background: #000;
+        }
+
+        .api-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+        }
+
+        .api-status.connected {
+            color: var(--proxy-on);
+        }
+
+        /* --- SIDEBAR --- */
+        #dub-sidebar {
+            position: fixed;
+            top: var(--nav-height);
+            left: 0;
+            width: var(--sidebar-width);
+            height: calc(100vh - var(--nav-height));
+            background: rgba(10, 10, 12, 0.6);
+            backdrop-filter: blur(10px);
+            padding: 24px 16px;
+            border-right: 1px solid rgba(255, 255, 255, 0.03);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow-y: auto;
+        }
+
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 1.4rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar-item:hover, .sidebar-item.active {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .sidebar-item.active {
+            border-left: 3px solid var(--accent);
+            background: linear-gradient(90deg, rgba(255, 0, 85, 0.1), transparent);
+        }
+
+        /* --- MAIN PANELS --- */
+        .page {
+            display: none;
+            margin-top: var(--nav-height);
+            margin-left: var(--sidebar-width);
+            padding: 32px;
+            min-height: calc(100vh - var(--nav-height));
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .grid-header {
+            font-size: 2.4rem;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 24px;
+        }
+
+        /* --- VIDEO CARDS --- */
+        .video-card {
+            background: var(--bg-surface);
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+        }
+
+        .video-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5), 0 0 1px var(--accent);
+        }
+
+        .thumbnail-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background: #1f1f27;
+        }
+
+        .thumbnail-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-details {
+            padding: 14px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .meta-text {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .video-title {
+            font-size: 1.35rem;
+            font-weight: 600;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .creator-name {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+        }
+
+        /* --- WATCH BOX --- */
+        .watch-container {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .main-player-side {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .video-player-box {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .video-player-box iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .watch-title {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 0, 85, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--accent);
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            padding: 16px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            color: #fca5a5;
+            font-size: 1.4rem;
+            margin-bottom: 16px;
+        }
+
+        @media (max-width: 900px) {
+            .watch-container { grid-template-columns: 1fr; }
+            #dub-sidebar { width: 70px; }
+            .sidebar-item span { display: none; }
+            .page { margin-left: 70px; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav id="dub-nav">
+        <div class="brand-wrapper">
+            <div class="brand" onclick="switchPage('home')"><span>Dub</span>Tube</div>
+            <div id="proxyIndicator" class="proxy-status-light"></div>
+        </div>
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-bar" placeholder="Search YouTube videos..." oninput="handleSearch()">
+        </div>
+        <div class="api-status" id="apiStatus">
+            <span class="loading-spinner"></span>
+            <span>Initializing...</span>
+        </div>
+    </nav>
+
+    <aside id="dub-sidebar">
+        <div class="sidebar-item active" onclick="switchPage('home', this)"><span>Home</span></div>
+        <div class="sidebar-item" onclick="switchPage('trending', this)"><span>Trending</span></div>
+        <div class="sidebar-item" onclick="switchPage('music', this)"><span>Music</span></div>
+        <div class="sidebar-item" onclick="switchPage('gaming', this)"><span>Gaming</span></div>
+    </aside>
+
+    <main id="page-home" class="page active">
+        <h2 class="grid-header" id="feed-title">DubTube Feed</h2>
+        <div id="errorMessage"></div>
+        <div class="video-grid" id="home-grid"></div>
+    </main>
+
+    <main id="page-trending" class="page">
+        <h2 class="grid-header">Trending Now</h2>
+        <div class="video-grid" id="trending-grid"></div>
+    </main>
+
+    <main id="page-music" class="page">
+        <h2 class="grid-header">Music</h2>
+        <div class="video-grid" id="music-grid"></div>
+    </main>
+
+    <main id="page-gaming" class="page">
+        <h2 class="grid-header">Gaming</h2>
+        <div class="video-grid" id="gaming-grid"></div>
+    </main>
+
+    <main id="page-watch" class="page">
+        <div class="watch-container">
+            <div class="main-player-side">
+                <div class="video-player-box" id="videoPlayerBox"></div>
+                <h1 class="watch-title" id="playerTitle">Loading...</h1>
+                <p id="playerChannel" style="font-size: 1.4rem; color: var(--text-muted);"></p>
+                <p id="playerDescription" style="font-size: 1.3rem; color: var(--text-muted); line-height: 1.6; margin-top: 16px;"></p>
+            </div>
+            <div class="sidebar-recommendations">
+                <h3 style="font-size: 1.6rem; margin-bottom:16px;">Up Next</h3>
+                <div class="video-grid" id="next-up-grid" style="grid-template-columns: 1fr; gap:16px;"></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // YOUTUBE API CONFIGURATION
+        const YOUTUBE_API_KEY = 'AIzaSyDOXHpw4xqlXY_LEqOnULIeurT7DMCqWfQ'; // Replace with your API key
+        const API_BASE = 'https://www.googleapis.com/youtube/v3';
+
+        let database = [];
+        let activePage = 'home';
+        let apiConnected = false;
+
+        // Initialize Service Worker for Proxy
+        function initializeProxy() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => {
+                        console.log('✓ Service Worker registered for proxy');
+                        checkProxyStatus();
+                    })
+                    .catch(err => console.log('Service Worker registration failed:', err));
+            } else {
+                console.log('Service Workers not supported');
+                checkProxyStatus();
+            }
+        }
+
+        // Check proxy connectivity
+        function checkProxyStatus() {
+            const indicator = document.getElementById('proxyIndicator');
+            
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                indicator.classList.add('active');
+                console.log('✓ Proxy active via Service Worker');
+            } else if (window.__uv$config || window.__scramjet$config) {
+                indicator.classList.add('active');
+                console.log('✓ Proxy active via client config');
+            } else {
+                indicator.classList.remove('active');
+                console.log('⚠ Proxy not active');
+            }
+        }
+
+        // Fetch videos from YouTube API
+        async function fetchYouTubeVideos(query = 'popular music', maxResults = 24) {
+            try {
+                const url = `${API_BASE}/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=${maxResults}&key=${YOUTUBE_API_KEY}&order=relevance`;
+                
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                
+                const data = await response.json();
+                
+                if (!data.items || data.items.length === 0) {
+                    console.warn('No videos found for query:', query);
+                    return [];
+                }
+
+                return data.items.map(item => ({
+                    id: item.id.videoId,
+                    youtubeId: item.id.videoId,
+                    title: item.snippet.title,
+                    channel: item.snippet.channelTitle,
+                    description: item.snippet.description,
+                    thumb: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium.url,
+                    embedUrl: `https://www.youtube.com/embed/${item.id.videoId}?autoplay=1`,
+                    publishedAt: item.snippet.publishedAt
+                }));
+            } catch (error) {
+                console.error('YouTube API fetch error:', error);
+                showError(`Failed to load videos: ${error.message}`);
+                return [];
+            }
+        }
+
+        // Update API status
+        function updateApiStatus(connected, message) {
+            apiConnected = connected;
+            const statusEl = document.getElementById('apiStatus');
+            statusEl.innerHTML = connected 
+                ? `<span class="loading-spinner" style="display:none;"></span><span style="color:var(--proxy-on);">✓ ${message}</span>`
+                : `<span class="loading-spinner"></span><span>${message}</span>`;
+            statusEl.classList.toggle('connected', connected);
+        }
+
+        // Show error message
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) {
+                errorDiv.innerHTML = `<div class="error-message">${message}</div>`;
+            }
+        }
+
+        // Clear error message
+        function clearError() {
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) {
+                errorDiv.innerHTML = '';
+            }
+        }
+
+        // Render videos
+        function renderVideoSlice(containerId, items, clearPrevious = true) {
+            const target = document.getElementById(containerId);
+            if (!target) return;
+            
+            if (clearPrevious) target.innerHTML = "";
+
+            items.forEach(vid => {
+                const card = document.createElement('div');
+                card.className = 'video-card';
+                card.onclick = () => launchWatchScreen(vid);
+                card.innerHTML = `
+                    <div class="thumbnail-wrapper">
+                        <img src="${vid.thumb}" alt="${vid.title}" onerror="this.src='https://via.placeholder.com/320x180?text=Video'">
+                    </div>
+                    <div class="video-details">
+                        <div class="meta-text">
+                            <h3 class="video-title">${vid.title}</h3>
+                            <p class="creator-name">${vid.channel}</p>
+                        </div>
+                    </div>
+                `;
+                target.appendChild(card);
+            });
+        }
+
+        // Switch pages
+        async function switchPage(pageId, element) {
+            activePage = pageId;
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+
+            document.getElementById(`page-${pageId}`).classList.add('active');
+            if (element) element.classList.add('active');
+
+            clearError();
+
+            if (pageId === 'home') {
+                if (database.length === 0) {
+                    updateApiStatus(false, 'Loading videos...');
+                    database = await fetchYouTubeVideos('youtube', 50);
+                    updateApiStatus(true, 'Connected');
+                }
+                renderVideoSlice('home-grid', database.slice(0, 24));
+            } else if (pageId === 'trending') {
+                updateApiStatus(false, 'Loading trending...');
+                const trending = await fetchYouTubeVideos('trending music 2024', 24);
+                updateApiStatus(true, 'Connected');
+                renderVideoSlice('trending-grid', trending);
+            } else if (pageId === 'music') {
+                updateApiStatus(false, 'Loading music...');
+                const music = await fetchYouTubeVideos('popular music hits', 24);
+                updateApiStatus(true, 'Connected');
+                renderVideoSlice('music-grid', music);
+            } else if (pageId === 'gaming') {
+                updateApiStatus(false, 'Loading gaming...');
+                const gaming = await fetchYouTubeVideos('gaming highlights', 24);
+                updateApiStatus(true, 'Connected');
+                renderVideoSlice('gaming-grid', gaming);
+            }
+
+            window.scrollTo(0, 0);
+        }
+
+        // Launch watch screen
+        function launchWatchScreen(videoObj) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-watch').classList.add('active');
+
+            document.getElementById('playerTitle').innerText = videoObj.title;
+            document.getElementById('playerChannel').innerText = `By ${videoObj.channel}`;
+            document.getElementById('playerDescription').innerText = videoObj.description || 'No description available';
+
+            const playerBox = document.getElementById('videoPlayerBox');
+            playerBox.innerHTML = `<iframe src="${videoObj.embedUrl}" allowfullscreen allow="autoplay; encrypted-media"></iframe>`;
+
+            // Show recommendations
+            if (database.length > 0) {
+                let shuffleItems = [...database].sort(() => 0.5 - Math.random()).slice(0, 10);
+                renderVideoSlice('next-up-grid', shuffleItems);
+            }
+
+            window.scrollTo(0, 0);
+        }
+
+        // Search functionality
+        async function handleSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) {
+                if (database.length > 0) {
+                    renderVideoSlice('home-grid', database.slice(0, 24));
+                }
+                return;
+            }
+
+            updateApiStatus(false, `Searching: ${query}...`);
+            const results = await fetchYouTubeVideos(query, 30);
+            updateApiStatus(true, 'Connected');
+            renderVideoSlice('home-grid', results);
+        }
+
+        // Infinite scroll
+        window.addEventListener('scroll', async () => {
+            if (activePage !== 'home' || !apiConnected) return;
+            
+            if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 600) {
+                let currentVideoCount = document.getElementById('home-grid').children.length;
+                if (currentVideoCount < database.length) {
+                    let nextSlice = database.slice(currentVideoCount, currentVideoCount + 12);
+                    renderVideoSlice('home-grid', nextSlice, false);
+                }
+            }
+        });
+
+        // Initialize on load
+        window.onload = () => {
+            initializeProxy();
+            updateApiStatus(false, 'Initializing YouTube API...');
+            switchPage('home');
+        };
+    </script>
+</body>
+</html>
